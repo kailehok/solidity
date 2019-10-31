@@ -4,6 +4,7 @@ Breaking changes:
  * Type Checker: Disallow virtual for library functions.
  * Deprecated dot syntax for `value` and `gas`.
  * Deprecated the identifier `now`.
+ * Type Checker: Disallows nested ``mapping`` types that are requested to live outside storage.
 
 Language Features:
 
