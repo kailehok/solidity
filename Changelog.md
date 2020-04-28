@@ -3,6 +3,7 @@
 Breaking changes:
  * Type Checker: Disallow virtual for library functions.
  * Deprecated dot syntax for `value` and `gas`.
+ * NatSpec: DocString block is terminated when encountering an empty line.
  * Deprecated the identifier `now`.
 
 Language Features:
@@ -13,6 +14,7 @@ Compiler Features:
 
 Bugfixes:
  * NatSpec: Constructors and functions have consistent userdoc output.
+ * Scanner: Fix bug when two empty NatSpec comments lead to scanning past EOL.
 
 
 ### 0.6.9 (unreleased)
