@@ -4,6 +4,7 @@ Language Features:
 
 
 Compiler Features:
+ * SMTChecker: General support to BitVectors and the bitwise ``and`` operator.
 
 
 Bugfixes:

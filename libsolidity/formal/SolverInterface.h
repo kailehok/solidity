@@ -92,6 +92,9 @@ public:
 			{"*", 2},
 			{"/", 2},
 			{"mod", 2},
+			{"&", 2},
+			{"int2bv", 2},
+			{"bv2int", 1},
 			{"select", 2},
 			{"store", 3},
 			{"const_array", 2},
@@ -180,6 +183,32 @@ public:
 		);
 	}
 
+	static Expression int2bv(Expression _n, size_t _size)
+	{
+		solAssert(_n.sort->kind == Kind::Int, "");
+		std::shared_ptr<IntSort> intSort = std::dynamic_pointer_cast<IntSort>(_n.sort);
+		solAssert(intSort, "");
+		solAssert(_size <= 256, "");
+		return Expression(
+			"int2bv",
+			std::vector<Expression>{std::move(_n), Expression(_size)},
+			std::make_shared<BitVectorSort>(_size)
+		);
+	}
+
+	static Expression bv2int(Expression _bv, bool _signed = false)
+	{
+		solAssert(_bv.sort->kind == Kind::BitVector, "");
+		std::shared_ptr<BitVectorSort> bvSort = std::dynamic_pointer_cast<BitVectorSort>(_bv.sort);
+		solAssert(bvSort, "");
+		solAssert(bvSort->size <= 256, "");
+		return Expression(
+			"bv2int",
+			std::vector<Expression>{std::move(_bv)},
+			SortProvider::intSort(_signed)
+		);
+	}
+
 	friend Expression operator!(Expression _a)
 	{
 		return Expression("not", std::move(_a), Kind::Bool);
@@ -235,6 +264,10 @@ public:
 	friend Expression operator%(Expression _a, Expression _b)
 	{
 		return Expression("mod", std::move(_a), std::move(_b), Kind::Int);
+	}
+	friend Expression operator&(Expression _a, Expression _b)
+	{
+		return Expression("&", {std::move(_a), std::move(_b)}, _a.sort);
 	}
 	Expression operator()(std::vector<Expression> _arguments) const
 	{

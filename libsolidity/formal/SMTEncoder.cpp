@@ -573,6 +573,8 @@ void SMTEncoder::endVisit(BinaryOperation const& _op)
 		arithmeticOperation(_op);
 	else if (TokenTraits::isCompareOp(_op.getOperator()))
 		compareOperation(_op);
+	else if (TokenTraits::isBitOp(_op.getOperator()))
+		bitwiseOperation(_op);
 	else
 		m_errorReporter.warning(
 			3876_error,
@@ -1239,6 +1241,43 @@ void SMTEncoder::booleanOperation(BinaryOperation const& _op)
 			_op.location(),
 			"Assertion checker does not yet implement the type " + _op.annotation().commonType->toString() + " for boolean operations"
 		);
+}
+
+void SMTEncoder::bitwiseOperation(BinaryOperation const& _op)
+{
+	solAssert(TokenTraits::isBitOp(_op.getOperator()), "");
+	auto commonType = _op.annotation().commonType;
+	solAssert(commonType, "");
+
+	unsigned bvSize = 256;
+	bool isSigned = false;
+	if (auto const* intType = dynamic_cast<IntegerType const*>(commonType))
+	{
+		bvSize = intType->numBits();
+		isSigned = intType->isSigned();
+	}
+	else if (auto const* fixedType = dynamic_cast<FixedPointType const*>(commonType))
+	{
+		bvSize = fixedType->numBits();
+		isSigned = fixedType->isSigned();
+	}
+
+	auto bvLeft = smt::Expression::int2bv(expr(_op.leftExpression()), bvSize);
+	auto bvRight = smt::Expression::int2bv(expr(_op.rightExpression()), bvSize);
+
+	optional<smt::Expression> result;
+	if (_op.getOperator() == Token::BitAnd)
+		result = bvLeft & bvRight;
+	// TODO implement the other operators
+	else
+		m_errorReporter.warning(
+			0000_error,
+			_op.location(),
+			"Assertion checker does not yet implement this bitwise operator."
+		);
+
+	if (result)
+		defineExpr(_op, smt::Expression::bv2int(*result, isSigned));
 }
 
 smt::Expression SMTEncoder::division(smt::Expression _left, smt::Expression _right, IntegerType const& _type)

@@ -32,7 +32,11 @@ SortPointer smtSort(frontend::Type const& _type)
 	switch (smtKind(_type.category()))
 	{
 	case Kind::Int:
-		return SortProvider::intSort;
+		if (auto const* intType = dynamic_cast<IntegerType const*>(&_type))
+			return SortProvider::intSort(intType->isSigned());
+		if (auto const* fixedType = dynamic_cast<FixedPointType const*>(&_type))
+			return SortProvider::intSort(fixedType->isSigned());
+		return SortProvider::uintSort;
 	case Kind::Bool:
 		return SortProvider::boolSort;
 	case Kind::Function:
@@ -48,7 +52,7 @@ SortPointer smtSort(frontend::Type const& _type)
 			returnSort = SortProvider::boolSort;
 		else if (returnTypes.size() > 1)
 			// Abstract sort.
-			returnSort = SortProvider::intSort;
+			returnSort = SortProvider::uintSort;
 		else
 			returnSort = smtSort(*returnTypes.front());
 		return make_shared<FunctionSort>(parameterSorts, returnSort);
@@ -65,7 +69,7 @@ SortPointer smtSort(frontend::Type const& _type)
 		{
 			auto stringLitType = dynamic_cast<frontend::StringLiteralType const*>(&_type);
 			solAssert(stringLitType, "");
-			return make_shared<ArraySort>(SortProvider::intSort, SortProvider::intSort);
+			return make_shared<ArraySort>(SortProvider::uintSort, SortProvider::uintSort);
 		}
 		else
 		{
@@ -78,7 +82,7 @@ SortPointer smtSort(frontend::Type const& _type)
 				solAssert(false, "");
 
 			solAssert(arrayType, "");
-			return make_shared<ArraySort>(SortProvider::intSort, smtSortAbstractFunction(*arrayType->baseType()));
+			return make_shared<ArraySort>(SortProvider::uintSort, smtSortAbstractFunction(*arrayType->baseType()));
 		}
 	}
 	case Kind::Tuple:
@@ -98,7 +102,7 @@ SortPointer smtSort(frontend::Type const& _type)
 	}
 	default:
 		// Abstract case.
-		return SortProvider::intSort;
+		return SortProvider::uintSort;
 	}
 }
 
@@ -113,7 +117,7 @@ vector<SortPointer> smtSort(vector<frontend::TypePointer> const& _types)
 SortPointer smtSortAbstractFunction(frontend::Type const& _type)
 {
 	if (isFunction(_type.category()))
-		return SortProvider::intSort;
+		return SortProvider::uintSort;
 	return smtSort(_type);
 }
 
@@ -124,7 +128,7 @@ vector<SortPointer> smtSortAbstractFunction(vector<frontend::TypePointer> const&
 		if (type)
 			sorts.push_back(smtSortAbstractFunction(*type));
 		else
-			sorts.push_back(SortProvider::intSort);
+			sorts.push_back(SortProvider::uintSort);
 	return sorts;
 }
 

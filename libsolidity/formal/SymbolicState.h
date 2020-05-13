@@ -62,7 +62,7 @@ private:
 
 	/// Symbolic balances.
 	SymbolicArrayVariable m_balances{
-		std::make_shared<ArraySort>(SortProvider::intSort, SortProvider::intSort),
+		std::make_shared<ArraySort>(SortProvider::uintSort, SortProvider::uintSort),
 		"balances",
 		m_context
 	};
