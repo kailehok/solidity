@@ -44,4 +44,9 @@ struct IRNames
 	static std::string zeroValue(Type const& _type, std::string const& _variableName);
 };
 
+struct IRHelpers
+{
+	static FunctionDefinition const* referencedFunctionDeclaration(Expression const& _expression);
+};
+
 }
