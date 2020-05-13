@@ -346,6 +346,13 @@ void AsmAnalyzer::operator()(Switch const& _switch)
 {
 	yulAssert(_switch.expression, "");
 
+	if (_switch.cases.size() == 1 && !_switch.cases[0].value)
+		m_errorReporter.warning(
+			1878_error,
+			_switch.location,
+			"\"switch\" statement with only a default case."
+		);
+
 	YulString valueType = expectExpression(*_switch.expression);
 
 	set<u256> cases;
@@ -609,4 +616,3 @@ void AsmAnalyzer::declarationError(SourceLocation const& _location, string const
 	m_errorReporter.declarationError(9595_error, _location, _description);
 	m_success = false;
 }
-
