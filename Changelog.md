@@ -5,6 +5,7 @@ Language Features:
 
 Compiler Features:
  * Build system: Update the soljson.js build to emscripten 1.39.15 and boost 1.73.0 and include Z3 for integrated SMTChecker support without the callback mechanism.
+ * Commandline Interface: Adds new option ``--base-path PATH`` for resolving relative paths when importing files via ``--standard-json``
  * SMTChecker: Support array ``length``.
  * SMTChecker: Support array ``push`` and ``pop``.
  * Add support for natspec comments on state variables.
