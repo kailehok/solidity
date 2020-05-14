@@ -446,6 +446,9 @@ void CHC::endVisit(FunctionCall const& _funCall)
 		internalFunctionCall(_funCall);
 		break;
 	case FunctionType::Kind::External:
+		externalFunctionCall(_funCall);
+		SMTEncoder::endVisit(_funCall);
+		break;
 	case FunctionType::Kind::DelegateCall:
 	case FunctionType::Kind::BareCall:
 	case FunctionType::Kind::BareCallCode:
@@ -542,6 +545,22 @@ void CHC::internalFunctionCall(FunctionCall const& _funCall)
 	m_context.addAssertion(m_error.currentValue() == 0);
 	m_error.increaseIndex();
 	m_context.addAssertion(m_error.currentValue() == previousError);
+}
+
+void CHC::externalFunctionCall(FunctionCall const& _funCall)
+{
+	solAssert(m_currentContract, "");
+
+	auto const* function = functionCallToDefinition(_funCall);
+	if (!function)
+		return;
+
+	auto preCallState = currentStateVariables();
+	for (auto const* var: m_stateVariables)
+		m_context.variable(*var)->increaseIndex();
+
+	auto nondet = (*m_nondetInterfaces.at(m_currentContract))(preCallState + currentStateVariables());
+	m_context.addAssertion(nondet);
 }
 
 void CHC::unknownFunctionCall(FunctionCall const&)
@@ -656,16 +675,29 @@ smt::SortPointer CHC::constructorSort()
 
 smt::SortPointer CHC::interfaceSort()
 {
-	return make_shared<smt::FunctionSort>(
-		m_stateSorts,
-		smt::SortProvider::boolSort
-	);
+	solAssert(m_currentContract, "");
+	return interfaceSort(*m_currentContract);
+}
+
+smt::SortPointer CHC::nondetInterfaceSort()
+{
+	solAssert(m_currentContract, "");
+	return nondetInterfaceSort(*m_currentContract);
 }
 
 smt::SortPointer CHC::interfaceSort(ContractDefinition const& _contract)
 {
 	return make_shared<smt::FunctionSort>(
 		stateSorts(_contract),
+		smt::SortProvider::boolSort
+	);
+}
+
+smt::SortPointer CHC::nondetInterfaceSort(ContractDefinition const& _contract)
+{
+	auto sorts = stateSorts(_contract);
+	return make_shared<smt::FunctionSort>(
+		sorts + sorts,
 		smt::SortProvider::boolSort
 	);
 }
@@ -748,11 +780,47 @@ void CHC::defineInterfacesAndSummaries(SourceUnit const& _source)
 			{
 				string suffix = base->name() + "_" + to_string(base->id());
 				m_interfaces[base] = createSymbolicBlock(interfaceSort(*base), "interface_" + suffix);
+				m_nondetInterfaces[base] = createSymbolicBlock(nondetInterfaceSort(*base), "nondet_interface_" + suffix);
+
 				for (auto const* var: stateVariablesIncludingInheritedAndPrivate(*base))
 					if (!m_context.knownVariable(*var))
 						createVariable(*var);
+
+				/// Base nondeterministic interface that allows
+				/// 0 steps to be taken, used as base for the inductive
+				/// rule for each function.
+				auto const& iface = *m_nondetInterfaces.at(base);
+				auto state0 = stateVariablesAtIndex(0, *base);
+				addRule(iface(state0 + state0), "base_nondet");
+
 				for (auto const* function: base->definedFunctions())
+				{
+					for (auto var: function->parameters())
+						createVariable(*var);
+					for (auto var: function->returnParameters())
+						createVariable(*var);
+					for (auto const* var: function->localVariables())
+						createVariable(*var);
+
 					m_summaries[contract].emplace(function, createSummaryBlock(*function, *contract));
+
+					if (!base->isLibrary() && !base->isInterface() && !function->isConstructor())
+					{
+						auto state1 = stateVariablesAtIndex(1, *base);
+						auto state2 = stateVariablesAtIndex(2, *base);
+
+						auto nondetPre = iface(state0 + state1);
+						auto nondetPost = iface(state0 + state2);
+
+						vector<smt::Expression> args{m_error.currentValue()};
+						args += state1 +
+							applyMap(function->parameters(), [this](auto _var) { return valueAtIndex(*_var, 0); }) +
+							state2 +
+							applyMap(function->returnParameters(), [this](auto _var) { return valueAtIndex(*_var, 1); });
+
+						connectBlocks(nondetPre, nondetPost, (*m_summaries.at(base).at(function))(args));
+					}
+				}
 			}
 }
 
@@ -788,15 +856,21 @@ smt::Expression CHC::summary(ContractDefinition const&)
 	);
 }
 
-smt::Expression CHC::summary(FunctionDefinition const& _function)
+smt::Expression CHC::summary(FunctionDefinition const& _function, ContractDefinition const& _contract)
 {
 	vector<smt::Expression> args{m_error.currentValue()};
 	auto contract = _function.annotation().contract;
-	args += contract->isLibrary() ? stateVariablesAtIndex(0, *contract) : initialStateVariables();
+	args += contract->isLibrary() ? stateVariablesAtIndex(0, *contract) : initialStateVariables(_contract);
 	args += applyMap(_function.parameters(), [this](auto _var) { return valueAtIndex(*_var, 0); });
-	args += contract->isLibrary() ? stateVariablesAtIndex(1, *contract) : currentStateVariables();
+	args += contract->isLibrary() ? stateVariablesAtIndex(1, *contract) : currentStateVariables(_contract);
 	args += applyMap(_function.returnParameters(), [this](auto _var) { return currentValue(*_var); });
-	return (*m_summaries.at(m_currentContract).at(&_function))(args);
+	return (*m_summaries.at(&_contract).at(&_function))(args);
+}
+
+smt::Expression CHC::summary(FunctionDefinition const& _function)
+{
+	solAssert(m_currentContract, "");
+	return summary(_function, *m_currentContract);
 }
 
 unique_ptr<smt::SymbolicFunctionVariable> CHC::createBlock(ASTNode const* _node, string const& _prefix)
@@ -839,10 +913,15 @@ vector<smt::Expression> CHC::initialStateVariables()
 	return stateVariablesAtIndex(0);
 }
 
+vector<smt::Expression> CHC::initialStateVariables(ContractDefinition const& _contract)
+{
+	return stateVariablesAtIndex(0, _contract);
+}
+
 vector<smt::Expression> CHC::stateVariablesAtIndex(int _index)
 {
 	solAssert(m_currentContract, "");
-	return applyMap(m_stateVariables, [&](auto _var) { return valueAtIndex(*_var, _index); });
+	return stateVariablesAtIndex(_index, *m_currentContract);
 }
 
 vector<smt::Expression> CHC::stateVariablesAtIndex(int _index, ContractDefinition const& _contract)
@@ -856,7 +935,12 @@ vector<smt::Expression> CHC::stateVariablesAtIndex(int _index, ContractDefinitio
 vector<smt::Expression> CHC::currentStateVariables()
 {
 	solAssert(m_currentContract, "");
-	return applyMap(m_stateVariables, [this](auto _var) { return currentValue(*_var); });
+	return currentStateVariables(*m_currentContract);
+}
+
+vector<smt::Expression> CHC::currentStateVariables(ContractDefinition const& _contract)
+{
+	return applyMap(stateVariablesIncludingInheritedAndPrivate(_contract), [this](auto _var) { return currentValue(*_var); });
 }
 
 vector<smt::Expression> CHC::currentFunctionVariables()

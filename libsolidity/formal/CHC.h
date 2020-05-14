@@ -77,6 +77,7 @@ private:
 
 	void visitAssert(FunctionCall const& _funCall);
 	void internalFunctionCall(FunctionCall const& _funCall);
+	void externalFunctionCall(FunctionCall const& _funCall);
 	void unknownFunctionCall(FunctionCall const& _funCall);
 	//@}
 
@@ -105,7 +106,9 @@ private:
 	static std::vector<smt::SortPointer> stateSorts(ContractDefinition const& _contract);
 	smt::SortPointer constructorSort();
 	smt::SortPointer interfaceSort();
+	smt::SortPointer nondetInterfaceSort();
 	static smt::SortPointer interfaceSort(ContractDefinition const& _const);
+	static smt::SortPointer nondetInterfaceSort(ContractDefinition const& _const);
 	smt::SortPointer arity0FunctionSort();
 	smt::SortPointer sort(FunctionDefinition const& _function);
 	smt::SortPointer sort(ASTNode const* _block);
@@ -148,10 +151,12 @@ private:
 	/// @returns the symbolic values of the state variables at the beginning
 	/// of the current transaction.
 	std::vector<smt::Expression> initialStateVariables();
+	std::vector<smt::Expression> initialStateVariables(ContractDefinition const& _contract);
 	std::vector<smt::Expression> stateVariablesAtIndex(int _index);
 	std::vector<smt::Expression> stateVariablesAtIndex(int _index, ContractDefinition const& _contract);
 	/// @returns the current symbolic values of the current state variables.
 	std::vector<smt::Expression> currentStateVariables();
+	std::vector<smt::Expression> currentStateVariables(ContractDefinition const& _contract);
 
 	/// @returns the current symbolic values of the current function's
 	/// input and output parameters.
@@ -172,6 +177,7 @@ private:
 	smt::Expression summary(ContractDefinition const& _contract);
 	/// @returns a predicate that defines a function summary.
 	smt::Expression summary(FunctionDefinition const& _function);
+	smt::Expression summary(FunctionDefinition const& _function, ContractDefinition const& _contract);
 	//@}
 
 	/// Solver related.
@@ -208,6 +214,12 @@ private:
 	/// Artificial Interface predicate.
 	/// Single entry block for all functions.
 	std::map<ContractDefinition const*, std::unique_ptr<smt::SymbolicFunctionVariable>> m_interfaces;
+
+	/// Nondeterministic interfaces.
+	/// These are used when the analyzed contract makes external calls to unknown code,
+	/// which means that the analyzed contract can potentially be called
+	/// nondeterministically.
+	std::map<ContractDefinition const*, std::unique_ptr<smt::SymbolicFunctionVariable>> m_nondetInterfaces;
 
 	/// Artificial Error predicate.
 	/// Single error block for all assertions.
