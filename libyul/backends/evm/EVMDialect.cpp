@@ -130,7 +130,7 @@ map<YulString, BuiltinFunctionForEVM> createBuiltins(langutil::EVMVersion _evmVe
 			FunctionCall const& _call,
 			AbstractAssembly& _assembly,
 			BuiltinContext& _context,
-			std::function<void(Expression const&)>
+			std::function<void(Expression const&)> const&
 		) {
 			yulAssert(_context.currentObject, "No object available.");
 			yulAssert(_call.arguments.size() == 1, "");
@@ -140,18 +140,16 @@ map<YulString, BuiltinFunctionForEVM> createBuiltins(langutil::EVMVersion _evmVe
 				_assembly.appendAssemblySize();
 			else
 			{
-				yulAssert(
-					_context.subIDs.count(dataName) != 0,
-					"Could not find assembly object <" + dataName.str() + ">."
-				);
-				_assembly.appendDataSize(_context.subIDs.at(dataName));
+				auto [found, subId] = _context.findSubIDForDataName(dataName);
+				yulAssert(found,"Could not find assembly object <" + dataName.str() + ">.");
+				_assembly.appendDataSize(subId);
 			}
 		}));
 		builtins.emplace(createFunction("dataoffset", 1, 1, SideEffects{}, {true}, [](
 			FunctionCall const& _call,
 			AbstractAssembly& _assembly,
 			BuiltinContext& _context,
-			std::function<void(Expression const&)>
+			std::function<void(Expression const&)> const&
 		) {
 			yulAssert(_context.currentObject, "No object available.");
 			yulAssert(_call.arguments.size() == 1, "");
@@ -161,11 +159,9 @@ map<YulString, BuiltinFunctionForEVM> createBuiltins(langutil::EVMVersion _evmVe
 				_assembly.appendConstant(0);
 			else
 			{
-				yulAssert(
-					_context.subIDs.count(dataName) != 0,
-					"Could not find assembly object <" + dataName.str() + ">."
-				);
-				_assembly.appendDataOffset(_context.subIDs.at(dataName));
+				auto [found, subId] = _context.findSubIDForDataName(dataName);
+				yulAssert(found,"Could not find assembly object <" + dataName.str() + ">.");
+				_assembly.appendDataOffset(subId);
 			}
 		}));
 		builtins.emplace(createFunction(
@@ -226,6 +222,24 @@ map<YulString, BuiltinFunctionForEVM> createBuiltins(langutil::EVMVersion _evmVe
 
 }
 
+std::tuple<bool, AbstractAssembly::SubID> BuiltinContext::findSubIDForDataName(YulString const& _dataName)
+{
+	if (subIDs.count(_dataName) == 1)
+		return make_tuple(true, subIDs.at(_dataName));
+
+	if (
+		size_t dotPos = _dataName.str().find_first_of('.');
+		count(_dataName.str().cbegin(), _dataName.str().cend(), '.') == 1 &&
+		_dataName.str().substr(0, dotPos) == currentObject->name.str()
+	)
+	{
+		YulString subObjectName = YulString{_dataName.str().substr(dotPos + 1)};
+		if (subIDs.count(subObjectName) == 1)
+			return make_tuple(true, subIDs.at(subObjectName));
+	}
+
+	return make_tuple(false, AbstractAssembly::SubID{});
+}
 
 EVMDialect::EVMDialect(langutil::EVMVersion _evmVersion, bool _objectAccess):
 	m_objectAccess(_objectAccess),

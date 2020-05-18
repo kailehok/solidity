@@ -66,7 +66,10 @@ set<YulString> Object::dataNames() const
 	set<YulString> names;
 	names.insert(name);
 	for (auto const& subObject: subIndexByName)
+	{
 		names.insert(subObject.first);
+		names.insert(YulString{name.str() + "." + subObject.first.str()});
+	}
 	// The empty name is not valid
 	names.erase(YulString{});
 	return names;
