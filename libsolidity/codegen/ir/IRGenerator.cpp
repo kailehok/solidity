@@ -137,14 +137,22 @@ string IRGenerator::generate(
 	t("deploy", deployCode(_contract));
 	generateImplicitConstructors(_contract);
 	generateQueuedFunctions();
+	InternalDispatchMap internalDispatchMap = m_context.generateInternalDispatchFunctions();
 	t("functions", m_context.functionCollector().requestedFunctions());
 	t("subObjects", subObjectSources(m_context.subObjectsCreated()));
 
 	resetContext(_contract);
+
+	// NOTE: Function pointers can be passed from creation code via storage variables. We need to
+	// get all the functions they could point to into the dispatch functions even if they're never
+	// referenced by name in the runtime code.
+	m_context.initializeInternalDispatch(move(internalDispatchMap));
+
 	// Do not register immutables to avoid assignment.
 	t("RuntimeObject", IRNames::runtimeObject(_contract));
 	t("dispatch", dispatchRoutine(_contract));
 	generateQueuedFunctions();
+	m_context.generateInternalDispatchFunctions();
 	t("runtimeFunctions", m_context.functionCollector().requestedFunctions());
 	t("runtimeSubObjects", subObjectSources(m_context.subObjectsCreated()));
 	return t.render();
@@ -555,6 +563,10 @@ void IRGenerator::resetContext(ContractDefinition const& _contract)
 	solAssert(
 		m_context.functionCollector().requestedFunctions().empty(),
 		"Reset context while it still had functions."
+	);
+	solAssert(
+		m_context.internalDispatchClean(),
+		"Reset internal dispatch map without consuming it."
 	);
 	m_context = IRGenerationContext(m_evmVersion, m_context.revertStrings(), m_optimiserSettings);
 
