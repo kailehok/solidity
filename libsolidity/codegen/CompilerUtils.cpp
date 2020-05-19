@@ -974,6 +974,14 @@ void CompilerUtils::convertType(
 				}
 				else
 				{
+					if (auto baseType = dynamic_cast<ArrayType const*>(typeOnStack.baseType()))
+						solUnimplementedAssert(
+							typeOnStack.isDynamicallySized() ||
+							!typeOnStack.isDynamicallyEncoded() ||
+							!baseType->isByteArray(),
+							"Copying nested calldata dynamic arrays from calldata to memory is not implemented in the old codegen."
+						);
+
 					m_context << u256(0) << Instruction::SWAP1;
 					// stack: <mem start> <source ref> (variably sized) <length> <counter> <mem data pos>
 					auto repeat = m_context.newTag();
